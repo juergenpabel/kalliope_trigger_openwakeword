@@ -6,7 +6,8 @@
 
   tasks:
     - name: "Install pip dependencies"
-      ansible.builtin.pip:
+      pip:
         name: openwakeword
         version: 0.5.1
-        executable: pip3
+        executable: pip
+
