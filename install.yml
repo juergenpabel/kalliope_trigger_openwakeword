@@ -3,11 +3,10 @@
   hosts: localhost
   gather_facts: no
   connection: local
-  become: false
 
   tasks:
     - name: "Install pip dependencies"
-      pip:
+      ansible.builtin.pip:
         name: openwakeword
         version: 0.5.1
         executable: pip3
