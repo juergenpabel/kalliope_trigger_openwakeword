@@ -1,0 +1,4 @@
+openwakeword
+pyaudio
+np
+
