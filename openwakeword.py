@@ -2,10 +2,11 @@
 
 import logging
 import time
-from os.path import basename, expanduser
+from os.path import basename, dirname, expanduser
 from threading import Thread
 from kalliope import Utils
 from kalliope.core.NeuronModule import MissingParameterException
+import openwakeword
 from openwakeword.model import Model
 import pyaudio
 import np
@@ -33,6 +34,7 @@ class Openwakeword(Thread):
 			self.config['model_paths'] = [self.config['model_path']]
 		self.config['model_paths'] = [model_path.strip() for model_path in self.config['model_paths'].split(',')]
 		self.config['model_paths'] = [Utils.get_real_file_path(model_path) for model_path in self.config['model_paths']]
+		openwakeword.utils.download_models(['dummy-model'], dirname(self.config['model_paths'][0])) # just so the feature models are downloaded
 		self.openwakeword = None
 		self.audio_stream = None
 
