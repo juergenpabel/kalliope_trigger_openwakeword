@@ -1,4 +1,4 @@
-openwakeword
+openwakeword==0.5.1
 pyaudio
 np
 

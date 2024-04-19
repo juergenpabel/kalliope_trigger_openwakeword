@@ -1,13 +1,13 @@
 #!/usr/bin/python3
 
+import os
 import logging
 import time
-from os.path import basename, dirname, expanduser
 from threading import Thread
 from kalliope import Utils
 from kalliope.core.NeuronModule import MissingParameterException
-import openwakeword
-from openwakeword.model import Model
+import openwakeword.utils
+import openwakeword.model
 import pyaudio
 import np
 
@@ -26,22 +26,25 @@ class Openwakeword(Thread):
 			raise MissingParameterException("Trigger callback method is missing (keyword argument 'callback')")
 
 		self.config = dict()
-		for key, default in {'model_path': None, 'model_paths': None, 'inference_framework': 'tflite', 'chunk_size': 1280}.items():
-			self.config[key] = kwargs.get(key, default)
-		if self.config['model_paths'] is None:
-			if self.config['model_path'] is None:
-				raise MissingParameterException("model_path or model_paths must be configured")
-			self.config['model_paths'] = [self.config['model_path']]
-		self.config['model_paths'] = [model_path.strip() for model_path in self.config['model_paths'].split(',')]
-		self.config['model_paths'] = [Utils.get_real_file_path(model_path) for model_path in self.config['model_paths']]
-		openwakeword.utils.download_models(['dummy-model'], dirname(self.config['model_paths'][0])) # just so the feature models are downloaded
-		self.openwakeword = None
+		for k, v in {'model_filename': None, 'featuremodels_directory': 'resources/data/openwakeword', 'inference_framework': None, 'chunk_size': 1280}.items():
+			self.config[k] = kwargs.get(k, v)
+		if self.config['model_filename'] is None:
+			raise MissingParameterException("'model_filename' must be configured")
+		if os.path.isfile(self.config['model_filename']) is False:
+			raise MissingParameterException(f"'model_filename' points to non-existing filename ({self.config['model_filename']})")
+		if self.config['inference_framework'] is None:
+			if self.config['model_filename'].endswith('.tflite'):
+				self.config['inference_framework'] = 'tflite'
+			elif self.config['model_filename'].endswith('.onnx'):
+				self.config['inference_framework'] = 'onnx'
+			else:
+				raise MissingParameterException("inference_framework must be configured (because model_filename doesn't end with .tflite or .onnx)")
+		self.openwakeword = openwakeword.model.Model(wakeword_models=[self.config['model_filename']], inference_framework=self.config['inference_framework'])
 		self.audio_stream = None
 
 
 	def run(self):
 		logger.debug("[trigger:openwakeword] run()")
-		self.openwakeword = Model(wakeword_models=self.config['model_paths'], inference_framework=self.config['inference_framework'])
 		self.audio_stream = pyaudio.PyAudio().open(rate=16000, channels=1, format=pyaudio.paInt16, input=True,
 		                                           frames_per_buffer=self.config['chunk_size'],
 		                                           input_device_index=self.input_device_index)
@@ -70,9 +73,8 @@ class Openwakeword(Thread):
 
 	def unpause(self):
 		logger.debug("[trigger:openwakeword] unpause()")
-		if self.audio_stream is not None:
-			self.audio_stream.close()
-		self.audio_stream = pyaudio.PyAudio().open(rate=16000, channels=1, format=pyaudio.paInt16, input=True,
-		                                      frames_per_buffer=self.config['chunk_size'],
-		                                      input_device_index=self.input_device_index)
+		if self.audio_stream is None:
+			self.audio_stream = pyaudio.PyAudio().open(rate=16000, channels=1, format=pyaudio.paInt16, input=True,
+			                                           frames_per_buffer=self.config['chunk_size'],
+			                                           input_device_index=self.input_device_index)
 
