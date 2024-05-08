@@ -1,4 +1,4 @@
-#!/usr/bin/python3
+#!/usr/bin/env python3
 
 import os
 import logging
@@ -19,9 +19,8 @@ logger = logging.getLogger("kalliope")
 class Openwakeword(Thread):
 	PARAMETERS = { 'model_filename': None,
 	               'model_sensitivity': 0.75,
-	               'featuremodels_directory': 'resources/data/openwakeword',
 	               'inference_framework': None,
-	               'chunk_size': 1280
+	               'chunk_size': 2560
 	             }
 	def __init__(self, **kwargs):
 		super().__init__()
@@ -30,7 +29,7 @@ class Openwakeword(Thread):
 		if self.callback is None:
 			raise MissingParameterException("[trigger:openwakeword] Trigger callback method is missing (keyword argument 'callback')")
 
-		self.config = dict()
+		self.config = {}
 		for key, default_value in Openwakeword.PARAMETERS.items():
 			self.config[key] = kwargs.get(key, default_value)
 		if self.config['model_filename'] is None:
@@ -44,6 +43,9 @@ class Openwakeword(Thread):
 				self.config['inference_framework'] = 'onnx'
 			else:
 				raise MissingParameterException("[trigger:openwakeword] 'inference_framework' can't be derived, must be explicitly configured")
+		logger.info(f"[trigger:openwakeword] configuration: model_filename={self.config['model_filename']}, "
+		                                                   "model_sensitivity={self.config['model_sensitivity']}, "
+		                                                   "chunk_size={self.config['chunk_size']}")
 		self.openwakeword = openwakeword.model.Model(wakeword_models=[self.config['model_filename']], inference_framework=self.config['inference_framework'])
 		self.audio_stream = None
 
@@ -52,17 +54,13 @@ class Openwakeword(Thread):
 		logger.debug("[trigger:openwakeword] run()")
 		while True:
 			if self.audio_stream is not None and self.audio_stream.is_active() is True:
-				chunks_available = self.audio_stream.get_read_available()
-				if chunks_available >= self.config['chunk_size']:
-					buffer = self.audio_stream.read(self.config['chunk_size'])
-					audio = np.frombuffer(buffer, dtype=np.int16)
-					predictions = self.openwakeword.predict(audio)
-					for model, score in predictions.items():
-						if score >= self.config['model_sensitivity']:
-							logger.info(f"[trigger:openwakeword] keyword from model '{model}' detected")
-							self.callback()
-				else:
-					time.sleep(float(self.config['chunk_size']-chunks_available)/16000)
+				buffer = self.audio_stream.read(self.config['chunk_size'])
+				audio = np.frombuffer(buffer, dtype=np.int16)
+				predictions = self.openwakeword.predict(audio)
+				for model, score in predictions.items():
+					if score >= self.config['model_sensitivity']:
+						logger.info(f"[trigger:openwakeword] keyword from model '{model}' detected (score={score:.2f})")
+						self.callback()
 			else:
 				time.sleep(0.1)
 
@@ -78,7 +76,9 @@ class Openwakeword(Thread):
 	def unpause(self):
 		logger.debug("[trigger:openwakeword] unpause()")
 		if self.audio_stream is None:
+			self.openwakeword.reset()
 			self.audio_stream = pyaudio.PyAudio().open(rate=16000, channels=1, format=pyaudio.paInt16, input=True,
 			                                           frames_per_buffer=self.config['chunk_size'],
 			                                           input_device_index=self.input_device_index)
+
 
