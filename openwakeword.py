@@ -51,23 +51,28 @@ class Openwakeword(Thread):
 	def run(self):
 		logger.debug("[trigger:openwakeword] run()")
 		while True:
-			if self.audio_stream is not None:
-				buffer = self.audio_stream.read(self.config['chunk_size'])
-				audio = np.frombuffer(buffer, dtype=np.int16)
-				predictions = self.openwakeword.predict(audio)
-				for model, score in predictions.items():
-					if score >= self.config['model_sensitivity']:
-						logger.info(f"[trigger:openwakeword] keyword from model '{model}' detected")
-						self.pause()
-						self.callback()
-			time.sleep(0.001)
+			if self.audio_stream is not None and self.audio_stream.is_active() is True:
+				chunks_available = self.audio_stream.get_read_available()
+				if chunks_available >= self.config['chunk_size']:
+					buffer = self.audio_stream.read(self.config['chunk_size'])
+					audio = np.frombuffer(buffer, dtype=np.int16)
+					predictions = self.openwakeword.predict(audio)
+					for model, score in predictions.items():
+						if score >= self.config['model_sensitivity']:
+							logger.info(f"[trigger:openwakeword] keyword from model '{model}' detected")
+							self.callback()
+				else:
+					time.sleep(float(self.config['chunk_size']-chunks_available)/16000)
+			else:
+				time.sleep(0.1)
 
 
 	def pause(self):
 		logger.debug("[trigger:openwakeword] pause()")
 		if self.audio_stream is not None:
-			self.audio_stream.close()
+			audio_stream = self.audio_stream
 			self.audio_stream = None
+			audio_stream.close()
 
 
 	def unpause(self):
