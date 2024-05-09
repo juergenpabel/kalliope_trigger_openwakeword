@@ -53,16 +53,22 @@ class Openwakeword(Thread):
 	def run(self):
 		logger.debug("[trigger:openwakeword] run()")
 		while True:
-			if self.audio_stream is not None and self.audio_stream.is_active() is True:
-				buffer = self.audio_stream.read(self.config['chunk_size'])
-				audio = np.frombuffer(buffer, dtype=np.int16)
-				predictions = self.openwakeword.predict(audio)
-				for model, score in predictions.items():
-					if score >= self.config['model_sensitivity']:
-						logger.info(f"[trigger:openwakeword] keyword from model '{model}' detected (score={score:.2f})")
-						self.callback()
-			else:
-				time.sleep(0.1)
+			try:
+				while True:
+					if self.audio_stream is not None and self.audio_stream.is_active() is True:
+						buffer = self.audio_stream.read(self.config['chunk_size'])
+						audio = np.frombuffer(buffer, dtype=np.int16)
+						predictions = self.openwakeword.predict(audio)
+						for model, score in predictions.items():
+							if score >= self.config['model_sensitivity']:
+								logger.info(f"[trigger:openwakeword] keyword from model '{model}' detected (score={score:.2f})")
+								self.callback()
+					else:
+						time.sleep(0.1)
+			except OSError:
+				logger.warn(f"[trigger:openwakeword] caught 'OSError' exception (probably pyaudio), restarting trigger...")
+				self.pause()
+				self.unpause()
 
 
 	def pause(self):
@@ -80,5 +86,4 @@ class Openwakeword(Thread):
 			self.audio_stream = pyaudio.PyAudio().open(rate=16000, channels=1, format=pyaudio.paInt16, input=True,
 			                                           frames_per_buffer=self.config['chunk_size'],
 			                                           input_device_index=self.input_device_index)
-
 
