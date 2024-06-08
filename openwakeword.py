@@ -43,9 +43,9 @@ class Openwakeword(Thread):
 				self.config['inference_framework'] = 'onnx'
 			else:
 				raise MissingParameterException("[trigger:openwakeword] 'inference_framework' can't be derived, must be explicitly configured")
-		logger.info(f"[trigger:openwakeword] configuration: model_filename={self.config['model_filename']}, "
-		                                                   "model_sensitivity={self.config['model_sensitivity']}, "
-		                                                   "chunk_size={self.config['chunk_size']}")
+		logger.debug(f"[trigger:openwakeword] configuration: model_filename={self.config['model_filename']}, "
+		                                                  f"model_sensitivity={self.config['model_sensitivity']}, "
+		                                                  f"chunk_size={self.config['chunk_size']}")
 		self.openwakeword = openwakeword.model.Model(wakeword_models=[self.config['model_filename']], inference_framework=self.config['inference_framework'])
 		self.audio_stream = None
 
@@ -81,9 +81,13 @@ class Openwakeword(Thread):
 
 	def unpause(self):
 		logger.debug("[trigger:openwakeword] unpause()")
-		if self.audio_stream is None:
-			self.openwakeword.reset()
-			self.audio_stream = pyaudio.PyAudio().open(rate=16000, channels=1, format=pyaudio.paInt16, input=True,
-			                                           frames_per_buffer=self.config['chunk_size'],
-			                                           input_device_index=self.input_device_index)
+		self.openwakeword.reset()
+		while self.audio_stream is None:
+			try:
+				self.audio_stream = pyaudio.PyAudio().open(rate=16000, channels=1, format=pyaudio.paInt16, input=True,
+				                                           frames_per_buffer=self.config['chunk_size'],
+				                                           input_device_index=self.input_device_index)
+			except OSError:
+				logger.warn(f"[trigger:openwakeword] caught 'OSError' exception (probably pyaudio) in pyaudio.PyAudio().open(), retrying...")
+				time.sleep(0.1)
 
