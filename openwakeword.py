@@ -72,7 +72,7 @@ class Openwakeword(Thread):
 
 
 	def pause(self):
-		logger.debug("[trigger:openwakeword] pause()")
+		logger.info("[trigger:openwakeword] pause()")
 		if self.audio_stream is not None:
 			audio_stream = self.audio_stream
 			self.audio_stream = None
@@ -80,7 +80,7 @@ class Openwakeword(Thread):
 
 
 	def unpause(self):
-		logger.debug("[trigger:openwakeword] unpause()")
+		logger.info("[trigger:openwakeword] unpause()")
 		self.openwakeword.reset()
 		while self.audio_stream is None:
 			try:
