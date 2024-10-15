@@ -17,6 +17,9 @@ logger = logging.getLogger("kalliope")
 
 
 class Openwakeword(Thread):
+	STATUS_RUNNING = 'running'
+	STATUS_PAUSED  = 'paused'
+
 	PARAMETERS = { 'model_filename': None,
 	               'model_sensitivity': 0.75,
 	               'inference_framework': None,
@@ -48,6 +51,7 @@ class Openwakeword(Thread):
 		                                                  f"chunk_size={self.config['chunk_size']}")
 		self.openwakeword = openwakeword.model.Model(wakeword_models=[self.config['model_filename']], inference_framework=self.config['inference_framework'])
 		self.audio_stream = None
+		self.status = Openwakeword.STATUS_PAUSED
 
 
 	def run(self):
@@ -55,8 +59,9 @@ class Openwakeword(Thread):
 		while True:
 			try:
 				while True:
-					if self.audio_stream is not None and self.audio_stream.is_active() is True:
-						buffer = self.audio_stream.read(self.config['chunk_size'])
+					audio_stream = self.audio_stream
+					if self.status == Openwakeword.STATUS_RUNNING and audio_stream is not None and audio_stream.is_active() is True:
+						buffer = audio_stream.read(self.config['chunk_size'])
 						audio = np.frombuffer(buffer, dtype=np.int16)
 						predictions = self.openwakeword.predict(audio)
 						for model, score in predictions.items():
@@ -67,27 +72,36 @@ class Openwakeword(Thread):
 						time.sleep(0.1)
 			except OSError:
 				logger.warn(f"[trigger:openwakeword] caught 'OSError' exception (probably pyaudio), restarting trigger...")
-				self.pause()
-				self.unpause()
+				self.status = Openwakeword.STATUS_PAUSED
+				if self.audio_stream is not None:
+					self.audio_stream.close()
+					self.audio_stream = None
+				if self.status == Openwakeword.STATUS_RUNNING:
+					self.unpause()
 
 
 	def pause(self):
-		logger.info("[trigger:openwakeword] pause()")
-		if self.audio_stream is not None:
-			audio_stream = self.audio_stream
-			self.audio_stream = None
-			audio_stream.close()
+		if self.status == Openwakeword.STATUS_RUNNING:
+			logger.info("[trigger:openwakeword] pause()")
+			self.status = Openwakeword.STATUS_PAUSED
+			if self.audio_stream is not None:
+				audio_stream = self.audio_stream
+				self.audio_stream = None
+				time.sleep(0.01)
+				audio_stream.close()
 
 
 	def unpause(self):
-		logger.info("[trigger:openwakeword] unpause()")
-		self.openwakeword.reset()
-		while self.audio_stream is None:
-			try:
-				self.audio_stream = pyaudio.PyAudio().open(rate=16000, channels=1, format=pyaudio.paInt16, input=True,
-				                                           frames_per_buffer=self.config['chunk_size'],
-				                                           input_device_index=self.input_device_index)
-			except OSError:
-				logger.warn(f"[trigger:openwakeword] caught 'OSError' exception (probably pyaudio) in pyaudio.PyAudio().open(), retrying...")
-				time.sleep(0.1)
+		if self.status == Openwakeword.STATUS_PAUSED:
+			logger.info("[trigger:openwakeword] unpause()")
+			self.openwakeword.reset()
+			while self.audio_stream is None:
+				try:
+					self.audio_stream = pyaudio.PyAudio().open(rate=16000, channels=1, format=pyaudio.paInt16, input=True,
+					                                           frames_per_buffer=self.config['chunk_size'],
+					                                           input_device_index=self.input_device_index)
+					self.status = Openwakeword.STATUS_RUNNING
+				except OSError:
+					logger.warn(f"[trigger:openwakeword] caught 'OSError' exception (probably pyaudio) in pyaudio.PyAudio().open(), retrying...")
+					time.sleep(0.1)
 
